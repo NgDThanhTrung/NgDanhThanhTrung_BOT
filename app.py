@@ -15,10 +15,17 @@ async def setup_webhook():
     await telegram_app.bot.set_webhook(WEBHOOK_URL)
 
 
-# 🔥 KHỞI TẠO NGAY KHI START (FLASK 3.x SAFE)
+# chạy khi start app
 asyncio.run(setup_webhook())
 
 
+# ✅ GET dùng cho health check + test
+@app.route("/", methods=["GET"])
+def index():
+    return "OK", 200
+
+
+# ✅ POST dùng cho Telegram webhook
 @app.route("/", methods=["POST"])
 def webhook():
     update = Update.de_json(
@@ -26,7 +33,7 @@ def webhook():
         telegram_app.bot
     )
     asyncio.run(telegram_app.process_update(update))
-    return "ok"
+    return "OK", 200
 
 
 if __name__ == "__main__":
