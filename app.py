@@ -8,7 +8,19 @@ WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
 
 app = Flask(__name__)
 telegram_app = bot.application
-webhook_ready = False
+
+# ✅ TẠO EVENT LOOP DUY NHẤT
+loop = asyncio.new_event_loop()
+asyncio.set_event_loop(loop)
+
+
+async def setup():
+    await telegram_app.initialize()
+    await telegram_app.bot.set_webhook(WEBHOOK_URL + "webhook")
+
+
+# ✅ CHẠY SETUP 1 LẦN DUY NHẤT
+loop.run_until_complete(setup())
 
 
 @app.route("/", methods=["GET"])
@@ -18,23 +30,13 @@ def index():
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
-    update = Update.de_json(
-        request.get_json(force=True),
-        telegram_app.bot
-    )
-    asyncio.run(telegram_app.process_update(update))
+    data = request.get_json(force=True)
+    update = Update.de_json(data, telegram_app.bot)
+
+    # ✅ DÙNG LOOP CŨ – KHÔNG TẠO LOOP MỚI
+    loop.create_task(telegram_app.process_update(update))
+
     return "OK", 200
-
-
-def set_webhook_once():
-    global webhook_ready
-    if not webhook_ready:
-        asyncio.run(telegram_app.initialize())
-        asyncio.run(telegram_app.bot.set_webhook(WEBHOOK_URL + "webhook"))
-        webhook_ready = True
-
-
-set_webhook_once()
 
 
 if __name__ == "__main__":
