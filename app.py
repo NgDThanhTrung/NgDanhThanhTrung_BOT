@@ -8,22 +8,15 @@ WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
 
 app = Flask(__name__)
 telegram_app = bot.application
-
-# cờ để chỉ set webhook 1 lần
 webhook_ready = False
 
 
 @app.route("/", methods=["GET"])
 def index():
-    global webhook_ready
-    if not webhook_ready:
-        asyncio.run(telegram_app.initialize())
-        asyncio.run(telegram_app.bot.set_webhook(WEBHOOK_URL))
-        webhook_ready = True
     return "OK", 200
 
 
-@app.route("/", methods=["POST"])
+@app.route("/webhook", methods=["POST"])
 def webhook():
     update = Update.de_json(
         request.get_json(force=True),
@@ -31,6 +24,17 @@ def webhook():
     )
     asyncio.run(telegram_app.process_update(update))
     return "OK", 200
+
+
+def set_webhook_once():
+    global webhook_ready
+    if not webhook_ready:
+        asyncio.run(telegram_app.initialize())
+        asyncio.run(telegram_app.bot.set_webhook(WEBHOOK_URL + "webhook"))
+        webhook_ready = True
+
+
+set_webhook_once()
 
 
 if __name__ == "__main__":
