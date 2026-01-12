@@ -1,15 +1,18 @@
 import os
 import logging
 import asyncio
+import time
 from aiohttp import web
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand
-from telegram.constants import ParseMode
+from telegram.constants import ParseMode, ChatAction
 from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler
 
-# --- 1. CẤU HÌNH (GIỮ NGUYÊN TỪ BẢN GỐC CỦA BẠN) ---
+# --- 1. CẤU HÌNH ---
 TOKEN = os.getenv('BOT_TOKEN')
-ADMIN_ID = 7346983056 
+ADMIN_ID = 7346983056  # ID Admin của bạn
+PORT = int(os.environ.get("PORT", 8000))
 
+# URLs Modules
 LOCKET_RAW_URL = "https://raw.githubusercontent.com/NgDanhThanhTrung/modules/main/LOCKET/Locket_NDTT.sgmodule"
 SPOTIFY_RAW_URL = "https://raw.githubusercontent.com/NgDanhThanhTrung/modules/main/SPOTIFY/SPOTIFY.sgmodule"
 YOUTUBE_RAW_URL = "https://raw.githubusercontent.com/NgDanhThanhTrung/modules/main/YOUTUBE/YOUTUBE.sgmodule"
@@ -20,9 +23,30 @@ WEB_URL = "https://ngdanhthanhtrung.github.io/Modules-NDTT-Premium/"
 CONTACT_URL = "https://t.me/NgDanhThanhTrung"
 DONATE_URL = "https://ngdanhthanhtrung.github.io/Bank/"
 
+# Biến chống spam
+user_last_message_time = {}
+SPAM_THRESHOLD = 2  # Giây
+
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-# --- 2. LOGIC WEB SERVER (ĐỂ DÙNG GÓI FREE ECO) ---
+# --- 2. LOGIC CHỐNG SPAM ---
+async def is_spamming(update: Update):
+    user_id = update.effective_user.id
+    current_time = time.time()
+    
+    # Cho phép Admin thoải mái
+    if user_id == ADMIN_ID:
+        return False
+
+    last_time = user_last_message_time.get(user_id, 0)
+    if current_time - last_time < SPAM_THRESHOLD:
+        await update.message.reply_text("⚠️ <b>Thao tác quá nhanh!</b> Vui lòng đợi 2 giây.", parse_mode=ParseMode.HTML)
+        return True
+    
+    user_last_message_time[user_id] = current_time
+    return False
+
+# --- 3. LOGIC WEB SERVER ---
 async def handle(request):
     return web.Response(text="Bot is running!")
 
@@ -31,13 +55,11 @@ async def start_web_server():
     app.router.add_get('/', handle)
     runner = web.AppRunner(app)
     await runner.setup()
-    # Koyeb Web Service yêu cầu port 8080
-    site = web.TCPSite(runner, '0.0.0.0', 8000)
+    site = web.TCPSite(runner, '0.0.0.0', PORT)
     await site.start()
-    logging.info("Web server started on port 8000")
+    logging.info(f"Web server started on port {PORT}")
 
-# --- 3. LOGIC TELEGRAM BOT (GIỮ NGUYÊN NỘI DUNG CỦA BẠN) ---
-
+# --- 4. LOGIC TELEGRAM BOT ---
 async def post_init(application):
     commands = [
         BotCommand("start", "Khởi động bot"),
@@ -49,6 +71,7 @@ async def post_init(application):
     await application.bot.set_my_commands(commands)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if await is_spamming(update): return
     user = update.effective_user
     await update.message.reply_text(
         f"👋 Chào mừng <b>{user.first_name}</b> đến với NgDanhThanhTrung_BOT!\n\n"
@@ -57,6 +80,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def hdsd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if await is_spamming(update): return
     keyboard = [
         [InlineKeyboardButton("✨ Web Hướng Dẫn", url=WEB_URL)],
         [InlineKeyboardButton("💬 Liên hệ Admin", url=CONTACT_URL), 
@@ -75,6 +99,9 @@ async def hdsd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
 
 async def send_guide(update, title, url, note=""):
+    # Hiệu ứng "đang soạn tin nhắn" cho chuyên nghiệp
+    await update.message.chat.send_action(ChatAction.TYPING)
+    
     keyboard = [[InlineKeyboardButton(f"🔗 Sao chép URL {title}", url=url)]]
     guide_text = (
         f"✨ <b>HƯỚNG DẪN CÀI ĐẶT {title.upper()}</b> ✨\n\n"
@@ -93,24 +120,37 @@ async def send_guide(update, title, url, note=""):
     await update.message.reply_text(guide_text, parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup(keyboard))
 
 # --- HANDLERS CHO CÁC MODULE ---
-async def locket(u, c): await send_guide(u, "Locket Gold", LOCKET_RAW_URL)
-async def spotify(u, c): await send_guide(u, "Spotify Premium", SPOTIFY_RAW_URL)
-async def youtube(u, c): await send_guide(u, "YouTube Premium", YOUTUBE_RAW_URL)
-async def combo2(u, c): await send_guide(u, "Combo Spotify & Locket", SPOTIFY_LOCKETGOLD_RAW_URL)
+async def locket(u, c): 
+    if await is_spamming(u): return
+    await send_guide(u, "Locket Gold", LOCKET_RAW_URL)
+
+async def spotify(u, c): 
+    if await is_spamming(u): return
+    await send_guide(u, "Spotify Premium", SPOTIFY_RAW_URL)
+
+async def youtube(u, c): 
+    if await is_spamming(u): return
+    await send_guide(u, "YouTube Premium", YOUTUBE_RAW_URL)
+
+async def combo2(u, c): 
+    if await is_spamming(u): return
+    await send_guide(u, "Combo Spotify & Locket", SPOTIFY_LOCKETGOLD_RAW_URL)
+
 async def combo3(u, c): 
+    if await is_spamming(u): return
     note = "<i>(Lưu ý: File .conf này hoạt động tương tự Module)</i>\n"
     await send_guide(u, "Siêu Combo 3-trong-1", SPOTIFY_YOUTUBE_LOCKET_RAW_URL, note)
 
-# --- 4. KHỞI CHẠY ---
+# --- 5. KHỞI CHẠY ---
 async def main():
     if not TOKEN:
         logging.error("LỖI: Chưa có BOT_TOKEN!")
         return
 
-    # 1. Chạy Web Server nền
+    # Chạy Web Server nền
     await start_web_server()
 
-    # 2. Thiết lập Bot
+    # Thiết lập Bot
     app = ApplicationBuilder().token(TOKEN).post_init(post_init).build()
     
     app.add_handler(CommandHandler("start", start))
@@ -121,12 +161,11 @@ async def main():
     app.add_handler(CommandHandler("spotify_locketgold", combo2))
     app.add_handler(CommandHandler("spotify_youtube_locket", combo3))
 
-    # 3. Chạy Polling song song với Web Server
+    logging.info("Bot đang bắt đầu polling...")
     async with app:
         await app.initialize()
         await app.start()
         await app.updater.start_polling(drop_pending_updates=True)
-        # Giữ bot sống cho đến khi bị tắt
         await asyncio.Event().wait()
 
 if __name__ == "__main__":
