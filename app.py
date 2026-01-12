@@ -9,23 +9,20 @@ WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
 app = Flask(__name__)
 telegram_app = bot.application
 
-
-async def setup_webhook():
-    await telegram_app.initialize()
-    await telegram_app.bot.set_webhook(WEBHOOK_URL)
+# cờ để chỉ set webhook 1 lần
+webhook_ready = False
 
 
-# chạy khi start app
-asyncio.run(setup_webhook())
-
-
-# ✅ GET dùng cho health check + test
 @app.route("/", methods=["GET"])
 def index():
+    global webhook_ready
+    if not webhook_ready:
+        asyncio.run(telegram_app.initialize())
+        asyncio.run(telegram_app.bot.set_webhook(WEBHOOK_URL))
+        webhook_ready = True
     return "OK", 200
 
 
-# ✅ POST dùng cho Telegram webhook
 @app.route("/", methods=["POST"])
 def webhook():
     update = Update.de_json(
