@@ -32,9 +32,9 @@ async def start_web_server():
     runner = web.AppRunner(app)
     await runner.setup()
     # Koyeb Web Service yêu cầu port 8080
-    site = web.TCPSite(runner, '0.0.0.0', 8080)
+    site = web.TCPSite(runner, '0.0.0.0', 8000)
     await site.start()
-    logging.info("Web server started on port 8080")
+    logging.info("Web server started on port 8000")
 
 # --- 3. LOGIC TELEGRAM BOT (GIỮ NGUYÊN NỘI DUNG CỦA BẠN) ---
 
