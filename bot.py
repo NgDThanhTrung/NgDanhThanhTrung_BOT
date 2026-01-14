@@ -1,120 +1,114 @@
 import os
 import logging
+import asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand
 from telegram.constants import ParseMode
-from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler
+from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, CallbackQueryHandler
 from flask import Flask
 from threading import Thread
 
-# --- 1. CẤU HÌNH (CONFIG) ---
+# --- 1. CẤU HÌNH ---
 TOKEN = os.getenv('BOT_TOKEN')
 ADMIN_ID = 7346983056 
 PORT = int(os.environ.get("PORT", 8000))
 
-# Web Server để duy trì hoạt động
+# Quản lý URL tập trung
+URLS = {
+    "locket": "https://raw.githubusercontent.com/NgDanhThanhTrung/modules/main/LOCKET/Locket_NDTT.sgmodule",
+    "spotify": "https://raw.githubusercontent.com/NgDanhThanhTrung/modules/main/SPOTIFY/SPOTIFY.sgmodule",
+    "youtube": "https://raw.githubusercontent.com/NgDanhThanhTrung/modules/main/YOUTUBE/YOUTUBE.sgmodule",
+    "combo2": "https://raw.githubusercontent.com/NgDanhThanhTrung/modules/main/Test_modules/Tong_hop/Spotify_LocketGold.sgmodule",
+    "combo3": "https://raw.githubusercontent.com/NgDanhThanhTrung/modules/main/tonghopv2/Spotity_Youtube_Locket%20.conf",
+    "web": "https://ngdanhthanhtrung.github.io/Modules-NDTT-Premium/",
+    "contact": "https://t.me/NgDanhThanhTrung",
+    "donate": "https://ngdanhthanhtrung.github.io/Bank/"
+}
+
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+
 server = Flask(__name__)
-
 @server.route('/')
-def ping():
-    return "NgDanhThanhTrung BOT is alive!", 200
+def ping(): return "Bot is Online!", 200
 
-# URLs Modules
-LOCKET_RAW_URL = "https://raw.githubusercontent.com/NgDanhThanhTrung/modules/main/LOCKET/Locket_NDTT.sgmodule"
-SPOTIFY_RAW_URL = "https://raw.githubusercontent.com/NgDanhThanhTrung/modules/main/SPOTIFY/SPOTIFY.sgmodule"
-YOUTUBE_RAW_URL = "https://raw.githubusercontent.com/NgDanhThanhTrung/modules/main/YOUTUBE/YOUTUBE.sgmodule"
-SPOTIFY_LOCKETGOLD_RAW_URL = "https://raw.githubusercontent.com/NgDanhThanhTrung/modules/main/Test_modules/Tong_hop/Spotify_LocketGold.sgmodule"
-SPOTIFY_YOUTUBE_LOCKET_RAW_URL = "https://raw.githubusercontent.com/NgDanhThanhTrung/modules/main/tonghopv2/Spotity_Youtube_Locket%20.conf"
+# --- 2. LOGIC TRỢ GIÚP ---
+def get_hdsd_keyboard():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("✨ Web Hướng Dẫn", url=URLS["web"])],
+        [InlineKeyboardButton("💬 Liên hệ Admin", url=URLS["contact"]), 
+         InlineKeyboardButton("☕ Donate", url=URLS["donate"])]
+    ])
 
-WEB_URL = "https://ngdanhthanhtrung.github.io/Modules-NDTT-Premium/"
-CONTACT_URL = "https://t.me/NgDanhThanhTrung"
-DONATE_URL = "https://ngdanhthanhtrung.github.io/Bank/"
-
-logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
-
-# --- 2. HANDLERS ---
+# --- 3. HANDLERS ---
 async def post_init(application):
-    commands = [
+    await application.bot.set_my_commands([
         BotCommand("start", "Khởi động bot"),
-        BotCommand("hdsd", "Danh sách lệnh hỗ trợ"),
-        BotCommand("locket", "Cài Locket Gold"),
-        BotCommand("spotify", "Cài Spotify Premium"),
-        BotCommand("youtube", "Cài YouTube Premium"),
-    ]
-    await application.bot.set_my_commands(commands)
+        BotCommand("hdsd", "Hướng dẫn sử dụng"),
+        BotCommand("locket", "Locket Gold"),
+        BotCommand("spotify", "Spotify Premium"),
+        BotCommand("youtube", "YouTube Premium"),
+        BotCommand("combo", "Các bản tổng hợp")
+    ])
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
+    # Thông báo cho Admin khi có người dùng mới (Tùy chọn)
+    try:
+        await context.bot.send_message(ADMIN_ID, f"👤 Người dùng mới: {user.full_name} (@{user.username})")
+    except: pass
+
     await update.message.reply_text(
-        f"👋 Chào mừng <b>{user.first_name}</b> đến với NgDanhThanhTrung_BOT!\n\n"
-        "Gõ /hdsd để xem tất cả các hướng dẫn cài đặt Module.",
+        f"👋 Chào <b>{user.first_name}</b>!\n\nTôi là trợ lý hỗ trợ cài đặt Module Premium.\n"
+        "Bấm /hdsd để bắt đầu.",
         parse_mode=ParseMode.HTML
     )
 
 async def hdsd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [
-        [InlineKeyboardButton("✨ Web Hướng Dẫn", url=WEB_URL)],
-        [InlineKeyboardButton("💬 Liên hệ Admin", url=CONTACT_URL), 
-         InlineKeyboardButton("☕ Donate", url=DONATE_URL)]
-    ]
     text = (
-        "<b>📚 DANH SÁCH LỆNH CÀI ĐẶT:</b>\n\n"
+        "<b>📚 DANH SÁCH LỆNH:</b>\n\n"
         "💛 /locket - Locket Gold\n"
         "🎵 /spotify - Spotify Premium\n"
-        "🔴 /youtube - YouTube Premium\n\n"
-        "<b>🎁 CÁC BẢN COMBO:</b>\n"
-        "✌️ /spotify_locketgold - Combo 2-trong-1\n"
-        "💎 /spotify_youtube_locket - Siêu Combo 3-trong-1\n\n"
-        "<i>Hãy chọn lệnh tương ứng để lấy link Module!</i>"
+        "🔴 /youtube - YouTube Premium\n"
+        "💎 /combo - Các bản tổng hợp (2in1, 3in1)\n"
     )
-    await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
+    await update.message.reply_text(text, reply_markup=get_hdsd_keyboard(), parse_mode=ParseMode.HTML)
 
-async def send_guide(update: Update, title: str, url: str, note: str = ""):
-    keyboard = [[InlineKeyboardButton(f"🔗 Sao chép URL {title}", url=url)]]
-    guide_text = (
-        f"✨ <b>HƯỚNG DẪN CÀI ĐẶT {title.upper()}</b> ✨\n\n"
-        f"1️⃣ <b>Copy URL:</b> Chạm giữ link bên dưới để sao chép:\n<code>{url}</code>\n\n"
-        f"2️⃣ <b>Shadowrocket:</b> Tab <b>Module</b> ➔ <b>Add Module</b> ➔ Dán URL ➔ OK.\n"
-        f"{note}\n"
-        f"3️⃣ <b>HTTPS Decryption:</b>\n"
-        f"• Bật <b>HTTPS Decryption</b> trong Settings.\n"
-        f"• Chọn <b>Generate New CA</b> ➔ Install.\n"
-        f"• Vào Cài đặt máy ➔ Đã tải về hồ sơ ➔ Tin cậy chứng chỉ.\n\n"
-        f"4️⃣ <b>Kết nối:</b> Bật VPN và tận hưởng!\n\n"
-        f"⚠️ <b>LƯU Ý: NẾU TẮT VPN SẼ MẤT, INBOX AD ĐỂ ĐƯỢC HỖ TRỢ DÙNG LÂU DÀI</b>\n"
-    )
-    await update.message.reply_text(guide_text, parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup(keyboard))
-
-async def locket(u, c): await send_guide(u, "Locket Gold", LOCKET_RAW_URL)
-async def spotify(u, c): await send_guide(u, "Spotify Premium", SPOTIFY_RAW_URL)
-async def youtube(u, c): await send_guide(u, "YouTube Premium", YOUTUBE_RAW_URL)
-async def combo2(u, c): await send_guide(u, "Combo Spotify & Locket", SPOTIFY_LOCKETGOLD_RAW_URL)
-async def combo3(u, c): 
-    note = "<i>(Lưu ý: File .conf này hoạt động tương tự Module)</i>\n"
-    await send_guide(u, "Siêu Combo 3-trong-1", SPOTIFY_YOUTUBE_LOCKET_RAW_URL, note)
-
-# --- 3. KHỞI CHẠY ---
-def run_flask():
-    server.run(host="0.0.0.0", port=PORT)
-
-def main():
-    if not TOKEN:
-        logging.error("LỖI: Chưa cấu hình biến môi trường BOT_TOKEN!")
-        return
+async def send_guide(update: Update, title: str, key: str, is_conf=False):
+    url = URLS[key]
+    note = "<i>(Lưu ý: Đây là file .conf, cài đặt tương tự Module)</i>\n" if is_conf else ""
     
-    # Chạy Web Server ở luồng riêng
-    Thread(target=run_flask, daemon=True).start()
+    guide_text = (
+        f"✨ <b>HƯỚNG DẪN: {title.upper()}</b> ✨\n\n"
+        f"1️⃣ <b>Sao chép link:</b>\n<code>{url}</code>\n\n"
+        f"2️⃣ <b>Shadowrocket:</b>\nTab <b>Module</b> ➔ <b>Add Module</b> ➔ Dán link.\n"
+        f"{note}\n"
+        f"3️⃣ <b>HTTPS Decryption:</b> Phải bật và tin cậy chứng chỉ CA trong cài đặt máy.\n\n"
+        f"⚠️ <i>Lưu ý: Duy trì VPN để sử dụng tính năng Premium.</i>"
+    )
+    await update.message.reply_text(
+        guide_text, 
+        parse_mode=ParseMode.HTML, 
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔗 Mở liên kết", url=url)]])
+    )
+
+# --- 4. KHỞI CHẠY ---
+def main():
+    if not TOKEN: return print("LỖI: Thiếu BOT_TOKEN")
+    
+    Thread(target=lambda: server.run(host="0.0.0.0", port=PORT), daemon=True).start()
     
     app = ApplicationBuilder().token(TOKEN).post_init(post_init).build()
     
+    # Đăng ký các lệnh
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("hdsd", hdsd))
-    app.add_handler(CommandHandler("locket", locket))
-    app.add_handler(CommandHandler("spotify", spotify))
-    app.add_handler(CommandHandler("youtube", youtube))
-    app.add_handler(CommandHandler("spotify_locketgold", combo2))
-    app.add_handler(CommandHandler("spotify_youtube_locket", combo3))
-    
-    logging.info("Bot đang chạy...")
+    app.add_handler(CommandHandler("locket", lambda u, c: send_guide(u, "Locket Gold", "locket")))
+    app.add_handler(CommandHandler("spotify", lambda u, c: send_guide(u, "Spotify Premium", "spotify")))
+    app.add_handler(CommandHandler("youtube", lambda u, c: send_guide(u, "YouTube Premium", "youtube")))
+    app.add_handler(CommandHandler("combo", lambda u, c: update.message.reply_text("Chọn combo:\n/spotify_locketgold\n/spotify_youtube_locket")))
+    app.add_handler(CommandHandler("spotify_locketgold", lambda u, c: send_guide(u, "Combo 2in1", "combo2")))
+    app.add_handler(CommandHandler("spotify_youtube_locket", lambda u, c: send_guide(u, "Siêu Combo 3in1", "combo3", True)))
+
+    print("Bot is running...")
     app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
