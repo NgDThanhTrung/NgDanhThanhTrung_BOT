@@ -6,7 +6,7 @@ from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, Messa
 from flask import Flask
 from threading import Thread
 
-# --- 1. CẤU HÌNH BIẾN MÔI TRƯỜNG ---
+# --- 1. CẤU HÌNH ---
 TOKEN = os.getenv('BOT_TOKEN')
 SHEET_ID = os.getenv('SHEET_ID')
 ADMIN_ID = 7346983056 
@@ -22,22 +22,19 @@ logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.INFO)
 def get_sheets():
     try:
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-        creds_json = os.getenv('GOOGLE_CREDS')
-        creds_dict = json.loads(creds_json)
-        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
-        client = gspread.authorize(creds)
-        spreadsheet = client.open_by_key(SHEET_ID)
-        return spreadsheet.worksheet("modules"), spreadsheet.worksheet("users")
+        creds_dict = json.loads(os.getenv('GOOGLE_CREDS'))
+        client = gspread.authorize(ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope))
+        ss = client.open_by_key(SHEET_ID)
+        return ss.worksheet("modules"), ss.worksheet("users")
     except Exception as e:
-        logging.error(f"Lỗi kết nối Sheet: {e}")
-        return None, None
+        logging.error(f"Sheet Error: {e}"); return None, None
 
 def get_info_kb():
     return [[InlineKeyboardButton("💬 Liên hệ Admin", url=CONTACT_URL),
              InlineKeyboardButton("☕ Donate", url=DONATE_URL)],
             [InlineKeyboardButton("✨ Web Hướng Dẫn", url=WEB_URL)]]
 
-# --- 3. TỰ ĐỘNG LƯU THÔNG TIN NGƯỜI DÙNG ---
+# --- 3. TỰ ĐỘNG LƯU NGƯỜI DÙNG ---
 async def auto_register(u: Update):
     user = u.effective_user
     user_id, name = str(user.id), user.full_name
@@ -50,6 +47,7 @@ async def auto_register(u: Update):
 
 # --- 4. XỬ LÝ LỆNH ---
 async def post_init(application):
+    # Chỉ hiện các lệnh cơ bản trong Menu Bot cho tất cả mọi người
     await application.bot.set_my_commands([
         BotCommand("start", "Khởi động Bot"),
         BotCommand("list", "Danh sách Module"),
@@ -60,8 +58,8 @@ async def post_init(application):
 async def start(u: Update, c: ContextTypes.DEFAULT_TYPE):
     await auto_register(u)
     welcome = (f"👋 Chào <b>{u.effective_user.first_name}</b>!\n\n"
-               f"Sử dụng lệnh /hdsd để xem cách dùng.\n"
-               f"Sử dụng /list để xem các Module hack mới nhất.")
+               f"Sử dụng /hdsd để xem hướng dẫn các lệnh.\n"
+               f"Sử dụng /list để xem danh sách Module Premium.")
     await u.message.reply_text(welcome, parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup(get_info_kb()))
 
 async def handle_msg(u: Update, c: ContextTypes.DEFAULT_TYPE):
@@ -70,31 +68,34 @@ async def handle_msg(u: Update, c: ContextTypes.DEFAULT_TYPE):
     cmd = u.message.text.replace("/", "").lower()
     sheet_mod, sheet_users = get_sheets()
 
-    # Lệnh /hdsd
+    # --- LỆNH /HDSD (ĐÃ ẨN ADMIN) ---
     if cmd == "hdsd":
-        text = ("📖 <b>HƯỚNG DẪN LỆNH:</b>\n\n"
-                "• /list : Xem danh sách Module.\n"
-                "• /info : Liên hệ & Donate.\n"
-                "• <code>/[tên_module]</code> : Lấy link (VD: /locket).")
+        text = ("📖 <b>HƯỚNG DẪN SỬ DỤNG:</b>\n\n"
+                "• /list : Xem danh sách Module đang có.\n"
+                "• /info : Thông tin liên hệ và ủng hộ.\n"
+                "• <code>/[tên_module]</code> : Lấy link & hướng dẫn (VD: /locket).")
+        # Chỉ hiện thêm nội dung nếu ID là Admin
         if u.effective_user.id == ADMIN_ID:
-            text += "\n\n⚡ <b>ADMIN:</b>\n• /list : Hiện thêm danh sách User.\n• /setlink : Thêm/Sửa Module."
+            text += "\n\n⚡ <b>QUYỀN ADMIN:</b>\n• /setlink key | Tên | URL\n• /list (tự hiện danh sách User)"
         return await u.message.reply_text(text, parse_mode=ParseMode.HTML)
 
-    # Lệnh /list (Phân quyền)
+    # --- LỆNH /LIST (ĐÃ ẨN ADMIN) ---
     if cmd == "list":
         mod_records = sheet_mod.get_all_records()
         msg_mod = "<b>📂 DANH SÁCH MODULE:</b>\n\n" + "\n".join([f"🔹 /{r['key']} - {r['title']}" for r in mod_records])
         await u.message.reply_text(msg_mod, parse_mode=ParseMode.HTML)
+        
+        # Chỉ Admin mới nhận được thêm tin nhắn danh sách User
         if u.effective_user.id == ADMIN_ID:
             user_records = sheet_users.get_all_records()
-            msg_user = "<b>👥 USER ĐÃ LƯU (ADMIN):</b>\n\n" + "\n".join([f"👤 {r['name']} ({r['username']})" for r in user_records])
+            msg_user = "<b>👥 DANH SÁCH NGƯỜI DÙNG:</b>\n\n" + "\n".join([f"👤 {r['name']} ({r['username']})" for r in user_records])
             await u.message.reply_text(msg_user, parse_mode=ParseMode.HTML)
         return
 
     if cmd == "info":
         return await u.message.reply_text("📱 <b>THÔNG TIN HỖ TRỢ:</b>", parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup(get_info_kb()))
 
-    # Tra cứu Module và HIỂN THỊ HƯỚNG DẪN 4 BƯỚC
+    # --- TRA CỨU MODULE (GIỮ NGUYÊN HƯỚNG DẪN 4 BƯỚC) ---
     mod_data = {r['key'].lower(): r for r in sheet_mod.get_all_records()}
     if cmd in mod_data:
         item = mod_data[cmd]
@@ -107,12 +108,12 @@ async def handle_msg(u: Update, c: ContextTypes.DEFAULT_TYPE):
                  f"• Vào Cài đặt máy ➔ Tin cậy chứng chỉ.\n\n"
                  f"4️⃣ <b>Kết nối:</b> Bật VPN và tận hưởng!\n\n"
                  f"⚠️ <i>Lưu ý: Luôn bật VPN khi sử dụng.</i>")
-        kb = [[InlineKeyboardButton(f"🔗 Copy URL {item['title']}", url=item['url'])]] + get_info_kb()
+        kb = [[InlineKeyboardButton(f"🔗 Mở Link {item['title']}", url=item['url'])]] + get_info_kb()
         await u.message.reply_text(guide, parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup(kb))
 
-# --- LỆNH QUẢN LÝ CỦA ADMIN ---
+# --- LỆNH ADMIN (ẨN HOÀN TOÀN) ---
 async def set_link(u: Update, c: ContextTypes.DEFAULT_TYPE):
-    if u.effective_user.id != ADMIN_ID: return
+    if u.effective_user.id != ADMIN_ID: return # Người thường dùng lệnh này sẽ không có phản hồi
     try:
         key, title, url = [a.strip() for a in " ".join(c.args).split("|")]
         sheet_mod, _ = get_sheets()
@@ -122,7 +123,7 @@ async def set_link(u: Update, c: ContextTypes.DEFAULT_TYPE):
         await u.message.reply_text(f"✅ Đã lưu Module: {title}")
     except: await u.message.reply_text("❌ Cú pháp: /setlink key | Tên | URL")
 
-# --- KHỞI CHẠY WEB SERVER DUY TRÌ ---
+# --- KHỞI CHẠY ---
 server = Flask(__name__)
 @server.route('/')
 def ping(): return "OK", 200
