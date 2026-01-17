@@ -50,9 +50,10 @@ async def handle_msg(u: Update, c: ContextTypes.DEFAULT_TYPE):
     if cmd == "list":
         m_list = "<b>📂 DANH SÁCH MODULE:</b>\n\n" + "\n".join([f"🔹 /{r['key']} - {r['title']}" for r in s_m.get_all_records()])
         await u.message.reply_text(m_list, parse_mode=ParseMode.HTML)
-        if uid == ADMIN_ID:
-            u_list = "<b>👥 DANH SÁCH NGƯỜI DÙNG:</b>\n\n" + "\n".join([f"👤 {r['name']} ({r['username']})" for r in s_u.get_all_records()])
-            await u.message.reply_text(u_list, parse_mode=ParseMode.HTML)
+        if uid == ADMIN_ID and u.message:
+        # Thêm {r['username']} vào phần hiển thị
+        u_list = "<b>👥 DANH SÁCH USER:</b>\n\n" + "\n".join([f"👤 {r['name']} ({r.get('username', 'N/A')})" for r in s_u.get_all_records()])
+        await u.message.reply_text(u_list, parse_mode=ParseMode.HTML)
         return
     if cmd == "info": return await u.message.reply_text("📱 <b>THÔNG TIN HỖ TRỢ:</b>", parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup(get_info_kb()))
     db = {r['key'].lower(): r for r in s_m.get_all_records()}
